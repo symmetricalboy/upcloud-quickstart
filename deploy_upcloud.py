@@ -36,9 +36,21 @@ class UpCloudDeployer:
             print("3. See UPCLOUD_SETUP.md for detailed instructions")
             sys.exit(1)
         
+        # Check for SSH key files
+        if not os.path.exists('upcloud_key.pub'):
+            print("❌ Error: SSH public key not found!")
+            print("Please generate SSH keys using: ssh-keygen -t rsa -b 4096 -f upcloud_key")
+            sys.exit(1)
+        
         try:
             self.manager = CloudManager(UPCLOUD_USERNAME, UPCLOUD_PASSWORD)
+            
+            # Read SSH public key
+            with open('upcloud_key.pub', 'r') as f:
+                self.ssh_public_key = f.read().strip()
+            
             print("✅ UpCloud API connection initialized")
+            print("✅ SSH public key loaded")
         except Exception as e:
             print(f"❌ Failed to initialize UpCloud API: {e}")
             sys.exit(1)
@@ -47,7 +59,15 @@ class UpCloudDeployer:
         """Test API credentials by fetching account information."""
         try:
             account = self.manager.get_account()
-            print(f"✅ API credentials valid for: {account.username}")
+            # Handle both dict and object responses
+            if hasattr(account, 'username'):
+                username = account.username
+            elif isinstance(account, dict) and 'username' in account:
+                username = account['username']
+            else:
+                username = "authenticated user"
+            
+            print(f"✅ API credentials valid for: {username}")
             return True
         except UpCloudAPIError as e:
             print(f"❌ API credentials invalid: {e}")
@@ -62,7 +82,16 @@ class UpCloudDeployer:
             zones = self.manager.get_zones()
             print("📍 Available zones:")
             for zone in zones:
-                print(f"   • {zone.id} - {zone.description}")
+                # Handle both object and dict/string responses
+                if hasattr(zone, 'id') and hasattr(zone, 'description'):
+                    print(f"   • {zone.id} - {zone.description}")
+                elif isinstance(zone, dict):
+                    zone_id = zone.get('id', zone.get('name', str(zone)))
+                    zone_desc = zone.get('description', zone.get('title', 'N/A'))
+                    print(f"   • {zone_id} - {zone_desc}")
+                else:
+                    # Fallback for string or other formats
+                    print(f"   • {str(zone)}")
             return zones
         except Exception as e:
             print(f"❌ Error fetching zones: {e}")
@@ -81,6 +110,7 @@ class UpCloudDeployer:
                 'title': title,
                 'hostname': f"{title.lower()}.example.com",
                 'plan': SERVER_PLAN,
+                'metadata': True,  # Required for cloud-init
                 'storage_devices': {
                     'storage_device': [{
                         'action': 'clone',
@@ -91,8 +121,10 @@ class UpCloudDeployer:
                     }]
                 },
                 'login_user': {
-                    'create_password': True,
-                    'username': 'root'
+                    'username': 'root',
+                    'ssh_keys': {
+                        'ssh_key': [self.ssh_public_key]
+                    }
                 },
                 'user_data': self._get_cloud_init_script()
             }
@@ -232,10 +264,51 @@ write_files:
     
     def get_server_ip(self, server):
         """Get the public IP address of the server."""
-        for interface in server.networking.interfaces:
-            for ip in interface.ip_addresses:
-                if ip.access == 'public' and ip.family == 'IPv4':
-                    return ip.address
+        try:
+            # Try the direct method first (UpCloud API has helper methods)
+            if hasattr(server, 'get_public_ip'):
+                try:
+                    public_ip = server.get_public_ip()
+                    if public_ip:
+                        return public_ip
+                except:
+                    pass
+            
+            # Check ip_addresses directly on server object
+            if hasattr(server, 'ip_addresses'):
+                for ip in server.ip_addresses:
+                    if hasattr(ip, 'access') and hasattr(ip, 'address'):
+                        if ip.access == 'public' and '.' in ip.address:  # IPv4 check
+                            return ip.address
+                    elif isinstance(ip, dict):
+                        if ip.get('access') == 'public' and '.' in str(ip.get('address', '')):
+                            return ip.get('address')
+            
+            # Handle object format with networking.interfaces
+            if hasattr(server, 'networking') and hasattr(server.networking, 'interfaces'):
+                for interface in server.networking.interfaces:
+                    for ip in interface.ip_addresses:
+                        if ip.access == 'public' and ip.family == 'IPv4':
+                            return ip.address
+            
+            # Handle dictionary format
+            elif isinstance(server, dict):
+                networking = server.get('networking', {})
+                interfaces = networking.get('interfaces', [])
+                for interface in interfaces:
+                    ip_addresses = interface.get('ip_addresses', [])
+                    for ip in ip_addresses:
+                        if isinstance(ip, dict):
+                            if ip.get('access') == 'public' and ip.get('family') == 'IPv4':
+                                return ip.get('address')
+                        elif hasattr(ip, 'access') and hasattr(ip, 'family'):
+                            if ip.access == 'public' and ip.family == 'IPv4':
+                                return ip.address
+                
+        except Exception as e:
+            print(f"⚠️  Error getting server IP: {e}")
+        
+        print("ℹ️  Could not automatically retrieve IP address from API response")
         return None
     
     def deploy_web_page(self, server_ip):
@@ -285,8 +358,11 @@ def main():
     # Get server IP
     server_ip = deployer.get_server_ip(server)
     if not server_ip:
-        print("❌ Could not get server IP address")
-        return
+        print("🌐 Server created successfully but couldn't auto-retrieve IP address")
+        print("📍 Please check your UpCloud control panel for the server IP:")
+        print("   https://hub.upcloud.com/")
+        print(f"   Look for server: {server.title}")
+        server_ip = "[CHECK_UPCLOUD_PANEL]"
     
     print(f"\n✅ Server Details:")
     print(f"   UUID: {server.uuid}")
@@ -296,11 +372,18 @@ def main():
     print(f"   Plan: {server.plan}")
     
     # Deploy web page (already done via cloud-init)
-    deployer.deploy_web_page(server_ip)
+    if server_ip != "[CHECK_UPCLOUD_PANEL]":
+        deployer.deploy_web_page(server_ip)
+        
+        print(f"\n🎉 Deployment Complete!")
+        print(f"   Website URL: http://{server_ip}")
+        print(f"   SSH Access: ssh -i upcloud_key root@{server_ip}")
+    else:
+        print(f"\n🎉 Deployment Complete!")
+        print(f"   Website URL: http://[YOUR_SERVER_IP]")
+        print(f"   SSH Access: ssh -i upcloud_key root@[YOUR_SERVER_IP]")
+        print(f"   💡 Replace [YOUR_SERVER_IP] with the actual IP from UpCloud panel")
     
-    print(f"\n🎉 Deployment Complete!")
-    print(f"   Website URL: http://{server_ip}")
-    print(f"   SSH Access: ssh root@{server_ip}")
     print(f"   Server UUID: {server.uuid}")
     print(f"\n💡 Remember to delete the server when you're done to avoid charges:")
     print(f"   You can do this via UpCloud control panel or API")

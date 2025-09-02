@@ -2,6 +2,8 @@
 
 Welcome to your UpCloud deployment guide! This will help you get started with deploying a simple web page using the UpCloud API.
 
+**Platform Support**: This guide includes commands for both **Linux/macOS (bash)** and **Windows (PowerShell)**.
+
 ## Step 1: Create Your UpCloud API Credentials
 
 ### Option A: Create a Dedicated API Subaccount (Recommended)
@@ -30,8 +32,16 @@ If you prefer to use your main account credentials:
 
 1. **Copy the environment file**:
 
+   **Bash/Linux/macOS:**
+
    ```bash
    cp .env.example .env
+   ```
+
+   **PowerShell/Windows:**
+
+   ```powershell
+   Copy-Item .env.example .env
    ```
 
 2. **Edit the .env file** with your actual credentials:
@@ -41,24 +51,60 @@ If you prefer to use your main account credentials:
    UPCLOUD_PASSWORD=your_actual_api_password
    ```
 
+3. **Generate SSH keys for server access** (UpCloud now requires SSH key authentication):
+
+   **Bash/Linux/macOS:**
+
+   ```bash
+   ssh-keygen -t rsa -b 4096 -f upcloud_key -N "" -C "upcloud-deployment"
+   ```
+
+   **PowerShell/Windows:**
+
+   ```powershell
+   ssh-keygen -t rsa -b 4096 -f upcloud_key -N "" -C "upcloud-deployment"
+   ```
+
+   This creates two files:
+   - `upcloud_key` (private key - keep this secure!)
+   - `upcloud_key.pub` (public key - this gets uploaded to your server)
+
 ## Step 3: Install Dependencies
+
+**Bash/Linux/macOS:**
 
 ```bash
 pip install -r requirements.txt
 ```
 
+**PowerShell/Windows:**
+
+```powershell
+pip install -r requirements.txt
+```
+
 ## Step 4: Run the Deployment Script
 
+**Bash/Linux/macOS:**
+
 ```bash
+python deploy_upcloud.py
+```
+
+**PowerShell/Windows:**
+
+```powershell
 python deploy_upcloud.py
 ```
 
 This script will:
 
 - ✅ Test your API credentials
-- 🖥️ Create a new server
-- 🌐 Deploy a simple web page
-- 📄 Provide you with the server IP address
+- 🔑 Upload your SSH public key to the server
+- 🖥️ Create a new server with SSH key authentication
+- 🌐 Deploy a simple web page automatically via cloud-init
+- 📄 Automatically retrieve and display the server IP address
+- 📋 Provide you with the SSH connection command and all server details
 
 ## Available Zones
 
@@ -84,11 +130,36 @@ This script will:
 - 🔑 Use a dedicated API subaccount for better security
 - 🛡️ Consider setting up IP restrictions for your API user
 - 🗑️ Delete test servers when you're done to avoid charges
+- 🔐 Keep your SSH private key (`upcloud_key`) secure and never share it
+- 📝 The SSH public key (`upcloud_key.pub`) is safe to share and gets uploaded to your server
+- 🚫 Never commit SSH private keys to version control
+- 🪟 **Windows users**: SSH keys work the same in PowerShell - no need for PuTTY or other tools
+
+## Troubleshooting
+
+**Common Issues & Solutions:**
+
+- **"SSH public key not found"** → Run: `ssh-keygen -t rsa -b 4096 -f upcloud_key`
+- **"CREATE_PASSWORD_INVALID"** → Fixed! Script now uses correct SSH key configuration
+- **"METADATA_DISABLED_ON_CLOUD-INIT"** → Fixed! Script enables metadata automatically
+- **IP address not retrieved** → Script shows UpCloud panel link as fallback
+- **API format errors** → Fixed! Script handles multiple UpCloud API response formats
+
+**If your server is created but script has errors:**
+1. Check UpCloud control panel: https://hub.upcloud.com/
+2. Look for your server and note the IP address
+3. Connect with: `ssh -i upcloud_key root@[your-server-ip]`
 
 ## Need Help?
 
 - 📖 [UpCloud API Documentation](https://developers.upcloud.com/)
 - 💬 [UpCloud Support](https://upcloud.com/support/)
 - 📧 Check your billing to monitor charges
+
+## License
+
+This project is open source and available under the MIT License. Feel free to use, modify, and share! 📄
+
+---
 
 Enjoy your UpCloud journey! 🎉

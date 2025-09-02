@@ -1,6 +1,10 @@
 # Environment variables (contains sensitive data)
 .env
 
+# SSH keys (contains sensitive data)
+upcloud_key
+upcloud_key.pub
+
 # Deployed server information
 deployed_server.json
 
