@@ -6,6 +6,7 @@ This script helps you clean up (delete) servers created during testing.
 
 import os
 import json
+import time
 from dotenv import load_dotenv
 from upcloud_api import CloudManager
 from upcloud_api.errors import UpCloudAPIError
@@ -47,9 +48,47 @@ def main():
         response = input(f"\n❓ Delete server {server_info['title']} ({server_info['uuid']})? (y/N): ").strip().lower()
         if response == 'y':
             try:
-                # Stop server first
-                print("⏹️  Stopping server...")
-                manager.stop_server(server_info['uuid'])
+                # Get server object and check its current state
+                server = manager.get_server(server_info['uuid'])
+                print(f"📊 Current server state: {server.state}")
+                
+                if server.state == 'started':
+                    print("⏹️  Stopping server...")
+                    server.stop()
+                    
+                    # Wait for the server to actually stop
+                    print("⏳ Waiting for server to stop...")
+                    max_wait = 60  # Maximum wait time in seconds
+                    wait_time = 0
+                    while wait_time < max_wait:
+                        time.sleep(5)
+                        wait_time += 5
+                        
+                        # Check server state
+                        server = manager.get_server(server_info['uuid'])
+                        print(f"   Server state: {server.state}")
+                        
+                        if server.state == 'stopped':
+                            print("✅ Server has stopped!")
+                            break
+                        elif server.state == 'error':
+                            print("❌ Server is in error state")
+                            break
+                    
+                    if wait_time >= max_wait:
+                        print("⏰ Timeout waiting for server to stop. Attempting deletion anyway...")
+                        
+                elif server.state == 'stopped':
+                    print("✅ Server is already stopped!")
+                    
+                elif server.state == 'maintenance':
+                    print("⚠️  Server is in maintenance mode, waiting...")
+                    time.sleep(10)
+                    
+                else:
+                    print(f"ℹ️  Server is in state: {server.state}")
+                
+                time.sleep(2)  # Small additional buffer
                 
                 # Delete server
                 print("🗑️  Deleting server...")
@@ -83,9 +122,45 @@ def main():
                     response = input(f"     ❓ Delete this server? (y/N): ").strip().lower()
                     if response == 'y':
                         try:
+                            print(f"     📊 Current server state: {server.state}")
+                            
                             if server.state == 'started':
                                 print("     ⏹️  Stopping server...")
-                                manager.stop_server(server.uuid)
+                                server.stop()
+                                
+                                # Wait for the server to actually stop
+                                print("     ⏳ Waiting for server to stop...")
+                                max_wait = 60  # Maximum wait time in seconds
+                                wait_time = 0
+                                while wait_time < max_wait:
+                                    time.sleep(5)
+                                    wait_time += 5
+                                    
+                                    # Check server state
+                                    server = manager.get_server(server.uuid)
+                                    print(f"        Server state: {server.state}")
+                                    
+                                    if server.state == 'stopped':
+                                        print("     ✅ Server has stopped!")
+                                        break
+                                    elif server.state == 'error':
+                                        print("     ❌ Server is in error state")
+                                        break
+                                
+                                if wait_time >= max_wait:
+                                    print("     ⏰ Timeout waiting for server to stop. Attempting deletion anyway...")
+                                    
+                            elif server.state == 'stopped':
+                                print("     ✅ Server is already stopped!")
+                                
+                            elif server.state == 'maintenance':
+                                print("     ⚠️  Server is in maintenance mode, waiting...")
+                                time.sleep(10)
+                                
+                            else:
+                                print(f"     ℹ️  Server is in state: {server.state}")
+                            
+                            time.sleep(2)  # Small additional buffer
                             
                             print("     🗑️  Deleting server...")
                             manager.delete_server(server.uuid)

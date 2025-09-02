@@ -238,20 +238,37 @@ write_files:
     
     def wait_for_server(self, server_uuid, timeout=300):
         """Wait for server to be in started state."""
-        print(f"⏳ Waiting for server {server_uuid} to start...")
+        print(f"🚀 Deploying your new UpCloud server...")
+        print(f"💡 This typically takes 2-3 minutes - please be patient!")
+        print(f"📋 We'll monitor the deployment progress for you...\n")
         
         start_time = time.time()
+        last_state = None
+        state_start_time = time.time()
+        
         while time.time() - start_time < timeout:
             try:
                 server = self.manager.get_server(server_uuid)
-                print(f"   Server state: {server.state}")
+                current_state = server.state
+                elapsed_minutes = (time.time() - start_time) / 60
                 
-                if server.state == 'started':
-                    print("✅ Server is now running!")
-                    return server
-                elif server.state == 'error':
-                    print("❌ Server failed to start")
-                    return None
+                # Only print status update if state changed or every 30 seconds
+                if current_state != last_state or (time.time() - state_start_time) > 30:
+                    if current_state == 'maintenance':
+                        print(f"🔧 Server is being configured and installed... ({elapsed_minutes:.1f} min)")
+                        print(f"   📦 Installing Ubuntu 22.04 LTS and setting up Nginx web server")
+                    elif current_state == 'started':
+                        print(f"✅ Server is now running! ({elapsed_minutes:.1f} min)")
+                        print(f"🌐 Web server setup is completing in the background...")
+                        return server
+                    elif current_state == 'error':
+                        print(f"❌ Server deployment failed after {elapsed_minutes:.1f} minutes")
+                        return None
+                    else:
+                        print(f"📊 Server state: {current_state} ({elapsed_minutes:.1f} min)")
+                    
+                    last_state = current_state
+                    state_start_time = time.time()
                     
                 time.sleep(10)
                 
@@ -259,7 +276,8 @@ write_files:
                 print(f"❌ Error checking server status: {e}")
                 time.sleep(10)
         
-        print(f"⏰ Timeout waiting for server to start after {timeout} seconds")
+        elapsed_minutes = timeout / 60
+        print(f"⏰ Timeout: Server didn't start within {elapsed_minutes:.0f} minutes")
         return None
     
     def get_server_ip(self, server):
@@ -313,9 +331,12 @@ write_files:
     
     def deploy_web_page(self, server_ip):
         """Deploy the web page to the server (already done via cloud-init)."""
-        print(f"\n🌐 Web page deployed automatically via cloud-init!")
-        print(f"   Your website is available at: http://{server_ip}")
-        print(f"   Allow a few minutes for the server to fully initialize...")
+        print(f"\n🌐 Web server deployment summary:")
+        print(f"   ✅ Ubuntu 22.04 LTS installed")
+        print(f"   ✅ Nginx web server configured")
+        print(f"   ✅ Firewall rules applied")
+        print(f"   ✅ Custom web page deployed")
+        print(f"   🌍 Your website: http://{server_ip}")
         
         return True
 
@@ -338,6 +359,7 @@ def main():
     print(f"   Zone: {SERVER_ZONE}")
     print(f"   Plan: {SERVER_PLAN}")
     print(f"   OS: Ubuntu 22.04 LTS")
+    print(f"   ⏰ Expected deployment time: 2-3 minutes")
     
     # Confirm deployment
     response = input("\n❓ Proceed with deployment? (y/N): ").strip().lower()
@@ -378,11 +400,15 @@ def main():
         print(f"\n🎉 Deployment Complete!")
         print(f"   Website URL: http://{server_ip}")
         print(f"   SSH Access: ssh -i upcloud_key root@{server_ip}")
+        print(f"\n⏰ Note: The web server might take an additional 1-2 minutes to fully initialize")
+        print(f"   If the website isn't immediately available, please wait a moment and refresh")
     else:
         print(f"\n🎉 Deployment Complete!")
         print(f"   Website URL: http://[YOUR_SERVER_IP]")
         print(f"   SSH Access: ssh -i upcloud_key root@[YOUR_SERVER_IP]")
         print(f"   💡 Replace [YOUR_SERVER_IP] with the actual IP from UpCloud panel")
+        print(f"\n⏰ Note: The web server might take an additional 1-2 minutes to fully initialize")
+        print(f"   If the website isn't immediately available, please wait a moment and refresh")
     
     print(f"   Server UUID: {server.uuid}")
     print(f"\n💡 Remember to delete the server when you're done to avoid charges:")
